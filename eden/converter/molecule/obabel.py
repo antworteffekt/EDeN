@@ -87,36 +87,75 @@ def obabel_to_networkx(mol):
 
 ##########################################################################
 
-def obabel_to_eden3d(iterable, file_format='sdf', cache={}, split_components=True, **kwargs):
+def obabel_to_eden3d(iterable, file_format='sdf', conformers_from_file=True,
+                     cache={}, split_components=True, **kwargs):
     """
     Takes an iterable file and yields the corresponding networkx graphs.
 
     **kwargs: arguments to be passed to other methods.
     """
 
-    n_conf = kwargs.get('n_conf', 0)
+    n_conf = kwargs.get('n_conf', 1)
 
     if file_format == 'sdf':
-        if split_components:  # yield every graph separately
-            for mol_sdf in read(iterable):
-                mol = pybel.readstring("sdf", mol_sdf)
-                mols = generate_conformers(mol.write("sdf"), n_conf)
-                for molecule in mols:
-                    molecule.removeh()
-                    graph = obabel_to_networkx3d(molecule, **kwargs)
-                    if len(graph):
-                        yield graph
-        else:  # construct a global graph and accumulate everything there
-            global_graph = nx.Graph()
-            for mol_sdf in read(iterable):
-                mol = pybel.readstring("sdf", mol_sdf)
-                mols = generate_conformers(mol.write("sdf"), n_conf)
-                for molecule in mols:
-                    molecule.removeh()
-                    g = obabel_to_networkx3d(molecule, **kwargs)
-                    if len(g):
-                        global_graph = nx.disjoint_union(global_graph, g)
-            yield global_graph
+        if conformers_from_file:
+
+            from itertools import groupby
+
+            if split_components:  # yield every graph separately
+                for k, g in groupby(read(iterable), lambda x: pybel.readstring('sdf', x).data['PUBCHEM_COMPOUND_CID']):
+                    molecules = []
+                    for mol_sdf in g:
+                        molecule = pybel.readstring('sdf', mol_sdf)
+                        molecule.removeh()
+                        molecules.append(molecule)
+                    if len(molecules) > n_conf:
+                        molecules = molecules[0:n_conf]
+                    for molecule in molecules:
+                        graph = obabel_to_networkx3d(molecule, **kwargs)
+                        if len(graph):
+                            yield graph
+
+            else:  # construct a global graph and accumulate everything there
+                global_graph = nx.Graph()
+
+                for k, g in groupby(read(iterable), lambda x: pybel.readstring('sdf', x).data['PUBCHEM_COMPOUND_CID']):
+                    molecules = []
+                    for mol_sdf in g:
+                        molecule = pybel.readstring('sdf', mol_sdf)
+                        molecule.removeh()
+                        molecules.append(molecule)
+                    if len(molecules) > n_conf:
+                        molecules = molecules[0:n_conf]
+
+                    for molecule in molecules:
+                        graph = obabel_to_networkx3d(molecule, **kwargs)
+                        if len(graph):
+                            global_graph = nx.disjoint_union(global_graph, graph)
+
+                    yield global_graph
+
+        else:
+            if split_components:  # yield every graph separately
+                for mol_sdf in read(iterable):
+                    mol = pybel.readstring("sdf", mol_sdf)
+                    mols = generate_conformers(mol.write("sdf"), n_conf)
+                    for molecule in mols:
+                        molecule.removeh()
+                        graph = obabel_to_networkx3d(molecule, **kwargs)
+                        if len(graph):
+                            yield graph
+            else:  # construct a global graph and accumulate everything there
+                global_graph = nx.Graph()
+                for mol_sdf in read(iterable):
+                    mol = pybel.readstring("sdf", mol_sdf)
+                    mols = generate_conformers(mol.write("sdf"), n_conf)
+                    for molecule in mols:
+                        molecule.removeh()
+                        g = obabel_to_networkx3d(molecule, **kwargs)
+                        if len(g):
+                            global_graph = nx.disjoint_union(global_graph, g)
+                yield global_graph
 
     elif file_format == 'smi':
         if split_components:  # yield every graph separately
