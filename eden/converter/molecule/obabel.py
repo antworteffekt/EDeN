@@ -6,8 +6,6 @@ import numpy as np
 import subprocess
 import shlex
 from eden.util import read
-from itertools import tee, groupby
-import random
 
 
 def mol_file_to_iterable(filename=None, file_format=None):
@@ -101,6 +99,8 @@ def obabel_to_eden3d(iterable, file_format='sdf', conformers_from_file=True,
 
     if file_format == 'sdf':
         if conformers_from_file:
+
+            from itertools import groupby
 
             if split_components:  # yield every graph separately
                 for k, g in groupby(read(iterable), lambda x: pybel.readstring('sdf', x).data['PUBCHEM_COMPOUND_CID']):
@@ -559,30 +559,3 @@ def flip_node_labels(orig_graph, new_label_name, old_label_name):
             del node[new_label_name]
 
         return graph
-
-def selection_iterator(iterable, ids):
-    '''Given an iterable and a list of ids (zero based) yield only the items whose id matches'''
-    for item in iterable:
-        if pybel.readstring('sdf', item).data['PUBCHEM_COMPOUND_CID'] in ids:
-            yield item
-
-def random_bipartition_conformers(no_confs, w_confs, relative_size):
-    w_confs_train, w_confs_test, w_confs_ids    = tee(w_confs, 3)
-    no_confs_train, no_confs_test, no_confs_ids = tee(no_confs, 3)
-    ids_w_confs = [k for k, g in groupby(w_confs_ids, lambda x: pybel.readstring('sdf', x).data['PUBCHEM_COMPOUND_CID'])]
-    ids_no_confs = [k for k, g in groupby(no_confs_ids, lambda x: pybel.readstring('sdf', x).data['PUBCHEM_COMPOUND_CID'])]
-
-    if set(ids_w_confs) == set(ids_no_confs):
-        ids = ids_w_confs
-
-    random.shuffle(ids)
-    split_point = int(relative_size * len(ids))
-    train_ids, test_ids = ids[:split_point], ids[split_point:]
-
-    iter_train_no_confs = selection_iterator(no_confs_train, train_ids)
-    iter_train_w_confs  = selection_iterator(w_confs_train,  train_ids)
-
-    iter_test_no_confs = selection_iterator(no_confs_test, test_ids)
-    iter_test_w_confs  = selection_iterator(w_confs_test,  test_ids)
-
-    return iter_train_no_confs, iter_test_no_confs, iter_train_w_confs, iter_test_w_confs
