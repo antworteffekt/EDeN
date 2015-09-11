@@ -131,7 +131,8 @@ def obabel_to_eden3d(iterable, file_format='sdf', conformers_from_file=True,
                     for molecule in molecules:
                         graph = obabel_to_networkx3d(molecule, **kwargs)
                         if len(graph):
-                            global_graph = nx.disjoint_union(global_graph, graph)
+                            global_graph = nx.disjoint_union(
+                                global_graph, graph)
 
                     yield global_graph
 
@@ -310,7 +311,11 @@ def find_nearest_neighbors(mol, distances, current_idx, **kwargs):
 
 
 def calculate_local_density(mol, distances, current_idx, **kwargs):
-    thresholds = np.linspace(0, 10, 20)
+
+    max_dist = kwargs.get('max_dist', 10)
+    n_intervals = kwargs.get('n_intervals', 20)
+
+    thresholds = np.linspace(0, max_dist, n_intervals)
     mol_size = len(mol.atoms)
     density_values = []
 
@@ -560,29 +565,40 @@ def flip_node_labels(orig_graph, new_label_name, old_label_name):
 
         return graph
 
-def selection_iterator(iterable, ids):
+
+def selection_iterator(iterable, ids, multiple_conformers=True):
     '''Given an iterable and a list of ids (zero based) yield only the items whose id matches'''
-    for item in iterable:
-        if pybel.readstring('sdf', item).data['PUBCHEM_COMPOUND_CID'] in ids:
-            yield item
+    if multiple_conformers:
+        for item in iterable:
+            if pybel.readstring('sdf', item).data['PUBCHEM_COMPOUND_CID'] in ids:
+                yield item
+    else:
+        local_ids = ids[:]
+        for item in iterable:
+            current_cid = pybel.readstring(
+                'sdf', item).data['PUBCHEM_COMPOUND_CID']
+            if current_cid in local_ids:
+                local_ids.remove(current_cid)
+                yield item
 
-def random_bipartition_conformers(no_confs, w_confs, relative_size):
-    w_confs_train, w_confs_test, w_confs_ids    = tee(w_confs, 3)
-    no_confs_train, no_confs_test, no_confs_ids = tee(no_confs, 3)
-    ids_w_confs = [k for k, g in groupby(w_confs_ids, lambda x: pybel.readstring('sdf', x).data['PUBCHEM_COMPOUND_CID'])]
-    ids_no_confs = [k for k, g in groupby(no_confs_ids, lambda x: pybel.readstring('sdf', x).data['PUBCHEM_COMPOUND_CID'])]
 
-    if set(ids_w_confs) == set(ids_no_confs):
-        ids = ids_w_confs
+def random_bipartition_conformers(iterable, relative_size):
+
+    iterable_train, iterable_test, iterable_ids = tee(iterable, 3)
+
+    ids = [k for k, g in groupby(iterable_ids, lambda x: pybel.readstring(
+        'sdf', x).data['PUBCHEM_COMPOUND_CID'])]
 
     random.shuffle(ids)
     split_point = int(relative_size * len(ids))
     train_ids, test_ids = ids[:split_point], ids[split_point:]
 
-    iter_train_no_confs = selection_iterator(no_confs_train, train_ids)
-    iter_train_w_confs  = selection_iterator(w_confs_train,  train_ids)
+    no_confs_train, w_confs_train = tee(iterable_train)
+    iter_train_no_confs = selection_iterator(no_confs_train, train_ids, multiple_conformers=False)
+    iter_train_w_confs = selection_iterator(w_confs_train, train_ids, multiple_conformers=True)
 
-    iter_test_no_confs = selection_iterator(no_confs_test, test_ids)
-    iter_test_w_confs  = selection_iterator(w_confs_test,  test_ids)
+    no_confs_test, w_confs_test = tee(iterable_test)
+    iter_test_no_confs = selection_iterator(no_confs_test, test_ids, multiple_conformers=False)
+    iter_test_w_confs = selection_iterator(w_confs_test, test_ids, multiple_conformers=True)
 
     return iter_train_no_confs, iter_test_no_confs, iter_train_w_confs, iter_test_w_confs
