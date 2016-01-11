@@ -1,5 +1,6 @@
 import networkx as nx
 import pylab as plt
+from matplotlib.font_manager import FontProperties
 import json
 from networkx.readwrite import json_graph
 
@@ -14,7 +15,7 @@ class SetEncoder(json.JSONEncoder):
 
 def serialize_graph(graph):
     json_data = json_graph.node_link_data(graph)
-    serial_data = json.dumps(json_data, separators=(',', ':'), indent = 4, cls = SetEncoder)
+    serial_data = json.dumps(json_data, separators=(',', ':'), indent=4, cls=SetEncoder)
     return serial_data
 
 
@@ -40,8 +41,8 @@ def draw_graph(graph,
                invert_colormap=False,
                verbose=True,
                file_name=None,
-               title_key='info'):
-
+               title_key='info',
+               ignore_for_layout="edge_attribute"):
     if size is not None:
         size_x = size
         size_y = int(float(size) / size_x_to_y_ratio)
@@ -62,15 +63,16 @@ def draw_graph(graph,
 
     if edge_label is not None:
         if secondary_edge_label:
-            edge_labels = dict([((u, v, ), '%s\n%s' % (d.get(edge_label, 'N/A'),
-                                                       d.get(secondary_edge_label, 'N/A')))
+            edge_labels = dict([((u, v,), '%s\n%s' % (d.get(edge_label, 'N/A'),
+                                                      d.get(secondary_edge_label, 'N/A')))
                                 for u, v, d in graph.edges(data=True)])
         else:
-            edge_labels = dict([((u, v, ), d.get(edge_label, 'N/A')) for u, v, d in graph.edges(data=True)])
+            edge_labels = dict([((u, v,), d.get(edge_label, 'N/A')) for u, v, d in graph.edges(data=True)])
 
     if vertex_color is None:
         node_color = 'white'
-    elif vertex_color == '_labels_':
+    elif vertex_color == '_labels_' or vertex_color == '_label_' or \
+            vertex_color == '__labels__' or vertex_color == '__label__':
         node_color = [hash(d.get('label', '.')) for u, d in graph.nodes(data=True)]
     else:
         if invert_colormap:
@@ -84,12 +86,15 @@ def draw_graph(graph,
         edge_color = [hash(d.get('label', '.')) for u, v, d in graph.edges(data=True)]
     else:
         if invert_colormap:
-            edge_color = [- d.get(edge_color, 0) for u, v, d in graph.edges(data=True)]
+            edge_color = [- d.get(edge_color, 0) for u, v, d in graph.edges(data=True) if 'nesting' not in d]
         else:
-            edge_color = [d.get(edge_color, 0) for u, v, d in graph.edges(data=True)]
+            edge_color = [d.get(edge_color, 0) for u, v, d in graph.edges(data=True) if 'nesting' not in d]
+
+    tmp_edge_set = [(a, b, d) for (a, b, d) in graph.edges(data=True) if ignore_for_layout in d]
+    graph.remove_edges_from(tmp_edge_set)
 
     if layout == 'graphviz':
-        pos = nx.graphviz_layout(graph, prog=prog)
+        pos = nx.graphviz_layout(graph, prog=prog, args="-Gstart=rand")
     elif layout == 'circular':
         pos = nx.circular_layout(graph)
     elif layout == 'random':
@@ -108,12 +113,15 @@ def draw_graph(graph,
     else:
         linewidths = 1
 
+    graph.add_edges_from(tmp_edge_set)
+
     nx.draw_networkx_nodes(graph, pos,
                            node_color=node_color,
                            alpha=vertex_alpha,
                            node_size=node_size,
                            linewidths=linewidths,
                            cmap=plt.get_cmap(colormap))
+
     if vertex_label is not None:
         nx.draw_networkx_labels(graph, pos, vertex_labels, font_size=font_size, font_color='black')
     nx.draw_networkx_edges(graph, pos,
@@ -126,13 +134,15 @@ def draw_graph(graph,
                            edgelist=edges_nesting,
                            width=1,
                            edge_color='k',
-                           style='dashed',
-                           alpha=edge_alpha)
+                           style='dotted',
+                           alpha=0.3)
     if edge_label is not None:
         nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=font_size)
     if title_key:
         title = str(graph.graph.get(title_key, ''))
-        plt.title(title)
+        font = FontProperties()
+        font.set_family('monospace')
+        plt.title(title, fontproperties=font)
     if size is not None:
         # here we decide if we output the image.
         # note: if size is not set, the canvas has been created outside of this function.
@@ -151,7 +161,6 @@ def draw_adjacency_graph(adjacency_matrix,
                          prog='neato',
                          node_size=80,
                          colormap='autumn'):
-
     graph = nx.from_scipy_sparse_matrix(adjacency_matrix)
 
     plt.figure(figsize=(size, size))
@@ -186,7 +195,7 @@ def draw_graph_set(graphs, n_graphs_per_line=5, size=4, edge_label=None, **args)
 
 
 # draw a row of graphs
-def draw_graph_row(graphs, contract=True, n_graphs_per_line=5, size=4, headlinehook=lambda x: "", **args):
+def draw_graph_row(graphs, contract=True, n_graphs_per_line=5, size=4, **args):
     count = len(graphs)
     size_y = size
     size_x = size * n_graphs_per_line
@@ -195,7 +204,6 @@ def draw_graph_row(graphs, contract=True, n_graphs_per_line=5, size=4, headlineh
 
     for i in range(count):
         plt.subplot(1, n_graphs_per_line, i + 1)
-        graphs[i].graph['info'] = headlinehook(graphs[i])
         g = graphs[i]
         draw_graph(g, size=None, **args)
     plt.show()
@@ -239,7 +247,7 @@ def plot_embedding(data_matrix, y,
                    labels=None,
                    image_file_name=None,
                    title=None,
-                   cmap='gnuplot',
+                   cmap='rainbow',
                    density=False):
     import matplotlib.pyplot as plt
     from matplotlib import offsetbox
@@ -251,9 +259,10 @@ def plot_embedding(data_matrix, y,
     if density:
         embed_dat_matrix_two_dimensions(data_matrix, y=y, instance_colormap=cmap)
     else:
-        plt.scatter(data_matrix[:, 0], data_matrix[:, 1], c=y, cmap=cmap, alpha=.7, s=30, edgecolors='gray')
+        plt.scatter(data_matrix[:, 0], data_matrix[:, 1], c=y, cmap=cmap, alpha=.7, s=30, edgecolors='black')
         plt.xticks([])
         plt.yticks([])
+        plt.axis('off')
     if image_file_name is not None:
         num_instances = data_matrix.shape[0]
         ax = plt.subplot(111)
@@ -269,15 +278,15 @@ def plot_embedding(data_matrix, y,
             label = str(labels[id])
             x = data_matrix[id, 0]
             y = data_matrix[id, 1]
-            plt.annotate(label, xy=(x, y), xytext=(0, 0), textcoords = 'offset points')
+            plt.annotate(label, xy=(x, y), xytext=(0, 0), textcoords='offset points')
 
 
 def plot_embeddings(data_matrix, y,
                     labels=None,
                     save_image_file_name=None,
                     image_file_name=None,
-                    size=25,
-                    cmap='gnuplot',
+                    size=20,
+                    cmap='rainbow',
                     density=False,
                     knn=16,
                     knn_density=16,
@@ -341,7 +350,8 @@ def plot_embeddings(data_matrix, y,
     duration = time.time() - start
     plt.subplot(224)
     plot_embedding(data_matrix_, y, labels=labels, title="KQST knn=%d (%.1f sec)" %
-                   (knn, duration), cmap=cmap, density=density, image_file_name=image_file_name)
+                                                         (knn, duration), cmap=cmap, density=density,
+                   image_file_name=image_file_name)
 
     if save_image_file_name:
         plt.savefig(save_image_file_name)

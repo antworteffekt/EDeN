@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import absolute_import
+from __future__ import print_function
 
 import os
 import sys
@@ -19,24 +21,24 @@ __version__ = '%s'
 
 def update_version_py():
     if not os.path.isdir(".git"):
-        print "This does not appear to be a Git repository."
+        print("This does not appear to be a Git repository.")
         return
     try:
         p = subprocess.Popen(["git", "describe",
                               "--tags", "--always"],
                              stdout=subprocess.PIPE)
     except EnvironmentError:
-        print "unable to run git, leaving eden/_version.py alone"
+        print("unable to run git, leaving eden/_version.py alone")
         return
     stdout = p.communicate()[0]
     if p.returncode != 0:
-        print "unable to run git, leaving eden/_version.py alone"
+        print("unable to run git, leaving eden/_version.py alone")
         return
     ver = stdout.strip()
     f = open("eden/_version.py", "w")
     f.write(VERSION_PY % ver)
     f.close()
-    print "set eden/_version.py to '%s'" % ver
+    print("set eden/_version.py to '%s'" % ver)
 
 
 def get_version():
@@ -103,6 +105,8 @@ setup(
     scripts=['bin/alignment',
              'bin/model',
              'bin/motif',
+             'bin/location_predictor',
+             'bin/motif_display.py',
              ],
     include_package_data=True,
     package_data={},
@@ -115,15 +119,30 @@ setup(
     stochastic gradient descent methods in classification).',
     long_description=open('README.md').read(),
     install_requires=[
-        "numpy >= 1.8.0",
-        "scipy >= 0.14.0",
-        "scikit-learn >= 0.16.0",
-        "joblib",
+        "cvxopt",
+        "cvxpy",
         "dill",
-        "networkx",
-        "matplotlib",
-        "requests",
         "esmre",
+        "flake8",
+        "joblib",
+        "matplotlib",
+        "mpld3",
+        "networkx <= 1.10",
+        "nose",
+        "numpy >= 1.8.0",
+        "openbabel",
+        "pandas",
+        "pybedtools>=0.6.6",
+        "pygraphviz",
+        "pymf",
+        "reportlab",
+        "requests",
+        "scikit-learn >= 0.17.0",
+        "scikit-neuralnetwork",
+        "scipy >= 0.14.0",
+        "scripttest",
+        "theano",
+        "weblogo"
     ],
     cmdclass={'sdist': sdist, 'install': install}
 )

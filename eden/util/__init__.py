@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 def configure_logging(logger, verbosity=0, filename=None):
+    """Utility to configure the logging aspects. If filename is None then no info is stored in files.
+    If filename is not None then everything that is logged is dumped to file (including program traces).
+    Verbosity is an int that can take values: 0 -> warning, 1 -> info, >=2 -> debug.
+    All levels are displayed on stdout, not on stderr. Please use exceptions and asserts
+    to output on stderr."""
+
     logger.propagate = False
     logger.handlers = []
     log_level = logging.WARNING
@@ -45,18 +51,29 @@ def configure_logging(logger, verbosity=0, filename=None):
         fh.setLevel(logging.DEBUG)
         # create formatter
         fformatter = logging.Formatter('%(asctime)s | %(levelname)-6s | %(name)10s | %(filename)10s |\
-         %(lineno)4s | %(message)s')
+   %(lineno)4s | %(message)s')
         # add formatter to fh
         fh.setFormatter(fformatter)
         # add handlers to logger
         logger.addHandler(fh)
 
 
-def serialize_dict(the_dict):
+def serialize_dict(the_dict, offset='small'):
     if the_dict:
         text = []
         for key in sorted(the_dict):
-            text.append('%10s: %s' % (key, the_dict[key]))
+            if offset == 'small':
+                line = '%10s: %s' % (key, the_dict[key])
+            elif offset == 'large':
+                line = '%25s: %s' % (key, the_dict[key])
+            elif offset == 'very_large':
+                line = '%50s: %s' % (key, the_dict[key])
+            else:
+                raise Exception('unrecognized option: %s' % offset)
+            line = line.replace('\n', ' ')
+            if len(line) > 100:
+                line = line[:100] + '  ...  ' + line[-20:]
+            text.append(line)
         return '\n'.join(text)
     else:
         return ""
@@ -73,7 +90,7 @@ def read(uri):
         return uri
     else:
         try:
-            # try if it is a URL and if we can open it
+                # try if it is a URL and if we can open it
             f = requests.get(uri).text.split('\n')
         except ValueError:
             # assume it is a file object
@@ -320,7 +337,7 @@ def fit_estimator(estimator,
 def fit(iterable_pos, iterable_neg=None,
         vectorizer=None,
         estimator=SGDClassifier(
-            average=True, class_weight='auto', shuffle=True),
+            average=True, class_weight='balanced', shuffle=True),
         fit_flag=False,
         n_jobs=-1,
         cv=10,
@@ -389,7 +406,7 @@ def estimate_model(positive_data_matrix=None,
                                                   scoring=scoring, n_jobs=n_jobs)
         logger.info('%20s: %.3f +- %.3f' % (scoring, np.mean(scores), np.std(scores)))
 
-    return apr, roc
+    return roc, apr
 
 
 def estimate(iterable_pos=None,
